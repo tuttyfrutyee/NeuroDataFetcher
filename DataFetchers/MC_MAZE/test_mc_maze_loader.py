@@ -19,5 +19,5 @@ if __name__ == "__main__":
 
     train_data, eval_data, target_eval_data, final_train_data, test_data = fetch_mc_maze(dm, "small")
 
-    print("train_data.shape = ", train_data.shape)
+    print("train_data.keys() = ", train_data.keys())
 
