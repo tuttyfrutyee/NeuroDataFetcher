@@ -47,6 +47,8 @@ class NWBDataset:
             that are not found in the dataset are
             ignored
         """
+
+        print("hey there")
         if isinstance(fpath, (str, Path)):
             fpath = os.path.expanduser(fpath)
             self.fpath = fpath
@@ -59,6 +61,9 @@ class NWBDataset:
                 filenames = sorted(glob(os.path.join(fpath, prefix + "*.nwb")))
             else:
                 filenames = [fpath]
+
+            print("filenames = ", filenames)
+    
             # If no files found
             if len(filenames) == 0:
                 raise FileNotFoundError(
@@ -132,6 +137,17 @@ class NWBDataset:
                 data, trial_info, descriptions, bin_width = self.load(
                     filenames[0], split_heldout=split_heldout, skip_fields=skip_fields
                 )
+                # print("trial_info = ", trial_info)
+                # Convert any Timedelta columns to strings to avoid serialization issues
+                trial_info_export = trial_info.copy()
+                for col in trial_info_export.select_dtypes(include=['timedelta64[ns]']).columns:
+                    trial_info_export[col] = trial_info_export[col].astype(str)
+                
+                # # Save as CSV for VSCode table viewer
+                # csv_path = 'trial_info_dump.csv'
+                # trial_info_export.to_csv(csv_path, index=True)
+                # print(f"Trial info saved to {csv_path} - You can open this directly in VSCode to view as a table")
+                
                 self.data = data
                 self.trial_info = trial_info
                 self.descriptions = descriptions
@@ -240,6 +256,7 @@ class NWBDataset:
 
         # Create a dictionary containing DataFrames for all time series
         data_dict = find_timeseries(nwbfile)
+        print("data_dict = ", data_dict)
 
         # Calculate data index
         start_time = 0.0
@@ -250,10 +267,15 @@ class NWBDataset:
             round(max(units.obs_intervals.apply(lambda x: x[-1][-1])) * rate)
             * bin_width
         )
+
+        print("end_time = ", end_time)
+        print("trial_info['end_time'].iloc[-1] = ", trial_info["end_time"].iloc[-1])
+        
         if end_time < trial_info["end_time"].iloc[-1]:
             print("obs_interval ends before trial end")  # TO REMOVE
             end_time = round(trial_info["end_time"].iloc[-1] * rate) * bin_width
         timestamps = (np.arange(start_time, end_time, bin_width) / 1000).round(6)
+
         timestamps_td = pd.to_timedelta(timestamps, unit="s")
 
         # Check that all timeseries match with calculated timestamps
@@ -273,12 +295,13 @@ class NWBDataset:
                 mask[start_idx:end_idx] = False
             return mask
 
+
         # Prepare variables for spike binning
-        masks = (
-            [(~units.heldout).to_numpy(), units.heldout.to_numpy()]
-            if split_heldout
-            else [np.full(len(units), True)]
-        )
+        
+        if split_heldout:
+            masks = [(~units.heldout).to_numpy(), units.heldout.to_numpy()]
+        else:
+            masks = [np.full(len(units), True)]
 
         for mask, name in zip(masks, ["spikes", "heldout_spikes"]):
             # Check if there are any units
@@ -287,6 +310,7 @@ class NWBDataset:
 
             # Allocate array to fill with spikes
             spike_arr = np.full((len(timestamps), np.sum(mask)), 0.0, dtype="float16")
+            
 
             # Bin spikes using decimal truncation and np.unique - faster than np.histogram with same results
             for idx, (_, unit) in enumerate(units[mask].iterrows()):
@@ -308,6 +332,7 @@ class NWBDataset:
                 spike_arr, index=timestamps_td, columns=units[mask].index
             ).astype("float16", copy=False)
 
+
         # Create MultiIndex column names
         data_list = []
         for key, val in data_dict.items():
@@ -315,12 +340,22 @@ class NWBDataset:
             val.columns = self._make_midx(
                 key, chan_names=chan_names, num_channels=val.shape[1]
             )
+
+            # Check time differences
+            time_diffs = val.index.to_series().diff()
+            print(f"\nFor {key}:")
+            print(f"Unique time differences (in nanoseconds):")
+            print(time_diffs.unique())
+            print(f"Number of rows: {len(val)}")            
+
             data_list.append(val)
 
         # Assign time-varying data to `self.data`
-        data = pd.concat(data_list, axis=1)
+        data = pd.concat(data_list, axis=1, join='inner')
+
         data.index.name = "clock_time"
         data.sort_index(axis=1, inplace=True)
+
 
         # Convert time fields in trial info to timedelta
         # and assign to `self.trial_info`
@@ -331,6 +366,7 @@ class NWBDataset:
                 return x
 
         trial_info = trial_info.apply(to_td, axis=0)
+
 
         if isinstance(fpath, str):
             io.close()
@@ -576,6 +612,9 @@ class NWBDataset:
                 arr = self.data[signal_type].to_numpy()
                 dtype = self.data[signal_type].dtypes.iloc[0]
                 nan_mask = np.isnan(arr[::resample_factor])
+                print("arr.shape[0] = ", arr.shape[0])
+                print("resample_factor = ", resample_factor)
+                print("arr.shape[0] % resample_factor = ", arr.shape[0] % resample_factor)
                 if arr.shape[0] % resample_factor != 0:
                     extra = arr[-(arr.shape[0] % resample_factor) :]
                     arr = arr[: -(arr.shape[0] % resample_factor)]
@@ -586,9 +625,18 @@ class NWBDataset:
                     .reshape((arr.shape[0] // resample_factor, resample_factor, -1))
                     .sum(axis=1)
                 )
+
+                print("before arr.shape = ", arr.shape)
                 if extra is not None:
+                    print("extra = ", extra)
+                    print("np.nan_to_num(extra).sum(axis=0).shape = ", np.nan_to_num(extra).sum(axis=0).shape)                    
                     arr = np.vstack([arr, np.nan_to_num(extra, copy=False).sum(axis=0)])
                 arr[nan_mask] = np.nan
+
+                print("new arr.shape = ", arr.shape)
+                print("self.data.index.shape = ", self.data.index.shape)
+                print("new index.shape = ", self.data.index[::resample_factor].shape)
+                print("self.data.index[::resample_factor][-3:] = ", self.data.index[::resample_factor][-3:])
                 resamp = pd.DataFrame(
                     arr, index=self.data.index[::resample_factor], dtype=dtype
                 )
@@ -615,10 +663,15 @@ class NWBDataset:
                 names=("signal_type", "channel"),
             )
             data_list.append(resamp)
+        print("Index type:", type(self.data.index))
+        print("First index value:", self.data.index[0])
+        print("Index dtype:", self.data.index.dtype)
         # Replace old data
         self.data = pd.concat(data_list, axis=1)
-        self.data.index.freq = f"{target_bin}ms"
+        # self.data.index.freq = f"{target_bin}ms"
         self.bin_width = target_bin
+
+        print("self.data.index[-3:] = ", self.data.index[-3:])
 
     def smooth_spk(
         self,
