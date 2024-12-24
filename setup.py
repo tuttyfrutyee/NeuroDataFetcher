@@ -10,6 +10,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/tuttyfrutyee/NeuroDataFetcher.git",  # Replace with your repository URL
     packages=find_packages(),
+    package_dir={"": "src"},  # Tell setuptools where to find the packages
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
