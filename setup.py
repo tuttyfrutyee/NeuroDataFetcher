@@ -5,6 +5,13 @@ setup(
     version="0.1",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
+    include_package_data=True,
+    package_data={
+        "neurodatafetcher": [
+            "DataFetchers/**/*",
+            "Utils/**/*",
+        ]
+    },
     install_requires=[
         "h5py>=3.12.1",
         "numpy>=2.2.1",
