@@ -1,10 +1,10 @@
-from neuro_data_fetcher.Utils.nlb_tools.nwb_interface import NWBDataset
-from neuro_data_fetcher.Utils.nlb_tools.make_tensors import (
+from neurodatafetcher.Utils.nlb_tools.nwb_interface import NWBDataset
+from neurodatafetcher.Utils.nlb_tools.make_tensors import (
     make_train_input_tensors, make_eval_input_tensors, make_eval_target_tensors, save_to_h5
 )
 import numpy as np
 
-from neuro_data_fetcher.Utils.directory_manager import DirectoryManager
+from neurodatafetcher.Utils.directory_manager import DirectoryManager
 
 def fetch_mc_maze(dm: DirectoryManager, dataset_name: str):
     """
