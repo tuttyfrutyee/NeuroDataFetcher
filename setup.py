@@ -3,7 +3,8 @@ from setuptools import setup, find_packages
 setup(
     name="neurodatafetcher",
     version="0.1",
-    packages=find_packages(),
+    package_dir={"": "src"},
+    packages=find_packages(where="src"),
     install_requires=[
         "h5py>=3.12.1",
         "numpy>=2.2.1",
